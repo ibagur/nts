@@ -54,7 +54,7 @@ def mixcloud_try(parsed):
             return resp['url']
     return None
 
-def download(url, quiet, save_dir, save=True):
+def download(url, quiet, save_dir, save=True, mp3_format=False):
     nts_url = url
     page = requests.get(url).content
     bs = BeautifulSoup(page, 'html.parser')
@@ -112,13 +112,31 @@ def download(url, quiet, save_dir, save=True):
                 _, file_ext = os.path.splitext(file)
                 file_ext = file_ext.lower()
 
-                if file_ext == '.webm' or file_ext == '.opus':
+                # Determine if conversion is needed
+                needs_conversion = False
+                target_format = None
+
+                if mp3_format:
+                    # Convert everything to MP3 if flag is set (except if already MP3)
+                    if file_ext != '.mp3':
+                        needs_conversion = True
+                        target_format = 'mp3'
+                else:
+                    # Default behavior: convert only webm/opus to ogg
+                    if file_ext == '.webm' or file_ext == '.opus':
+                        needs_conversion = True
+                        target_format = 'ogg'
+
+                if needs_conversion:
                     old_file_path = os.path.join(save_dir, file)
-                    file = file_name + '.ogg'
-                    new_file_path = os.path.join(save_dir, file)
-                    ffmpeg.input(old_file_path).output(new_file_path, acodec='copy').run(overwrite_output=True)
-                    os.remove(old_file_path)
-                    file_ext = '.ogg'
+                    new_file_path, file_ext = convert_audio_format(
+                        old_file_path,
+                        file_name,
+                        save_dir,
+                        target_format,
+                        quiet
+                    )
+                    file = os.path.basename(new_file_path)
 
                 set_metadata(os.path.join(save_dir, file), parsed, image, image_type)
 
@@ -267,6 +285,78 @@ def get_comment(parsed):
     comment += parsed['url']
     return comment
 
+def convert_audio_format(old_file_path, file_name, save_dir, target_format='ogg', quiet=False):
+    """
+    Convert audio file to target format using FFmpeg.
+
+    Args:
+        old_file_path: Full path to source audio file
+        file_name: Base filename without extension
+        save_dir: Directory for output file
+        target_format: 'ogg' or 'mp3'
+        quiet: Suppress output messages
+
+    Returns:
+        tuple: (new_file_path, new_extension) on success or (old_file_path, old_ext) on failure
+    """
+    _, old_ext = os.path.splitext(old_file_path)
+    new_file_path = os.path.join(save_dir, f'{file_name}.{target_format}')
+
+    # Determine FFmpeg parameters based on target format
+    if target_format == 'mp3':
+        ffmpeg_kwargs = {
+            'acodec': 'libmp3lame',
+            'audio_bitrate': '320k',
+            'ar': '44100',  # 44.1kHz sample rate
+        }
+    elif target_format == 'ogg':
+        ffmpeg_kwargs = {
+            'acodec': 'copy'  # Stream copy (no re-encoding)
+        }
+    else:
+        if not quiet:
+            print(f'Unsupported target format: {target_format}')
+        return old_file_path, old_ext
+
+    try:
+        if not quiet:
+            print(f'Converting to {target_format.upper()}...')
+
+        ffmpeg.input(old_file_path).output(
+            new_file_path,
+            **ffmpeg_kwargs
+        ).run(
+            overwrite_output=True,
+            capture_stdout=True,
+            capture_stderr=True,
+            quiet=quiet
+        )
+
+        # Verify output file exists and has content
+        if os.path.exists(new_file_path) and os.path.getsize(new_file_path) > 0:
+            os.remove(old_file_path)  # Remove original after successful conversion
+            return new_file_path, f'.{target_format}'
+        else:
+            if not quiet:
+                print(f'Warning: Conversion produced empty file, keeping original')
+            return old_file_path, old_ext
+
+    except ffmpeg.Error as e:
+        error_message = e.stderr.decode() if e.stderr else str(e)
+        if not quiet:
+            print(f'Warning: FFmpeg conversion failed, keeping original format')
+            print(f'Error details: {error_message}')
+        # Clean up partial file if exists
+        if os.path.exists(new_file_path):
+            os.remove(new_file_path)
+        return old_file_path, old_ext
+    except Exception as e:
+        if not quiet:
+            print(f'Warning: Unexpected error during conversion: {str(e)}')
+        if os.path.exists(new_file_path):
+            os.remove(new_file_path)
+        return old_file_path, old_ext
+
 def set_metadata(file_path, parsed, image, image_type):
     f = music_tag.load_file(file_path)
 
@@ -316,7 +406,7 @@ def main():
         exit(1)
 
     for line in lines:
-        download(line, False, download_dir)
+        download(line, False, download_dir, mp3_format=False)
 
 
 if __name__ == "__main__":

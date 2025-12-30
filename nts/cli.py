@@ -40,6 +40,11 @@ def main():
                       dest="quiet",
                       action="store_true",
                       help="only print errors")
+    parser.add_option("--mp3",
+                      default=False,
+                      dest="mp3_format",
+                      action="store_true",
+                      help="convert downloaded files to MP3 format (320kbps)")
 
     (options, args) = parser.parse_args()
 
@@ -64,7 +69,8 @@ def main():
             if match_ep:
                 nts.download(url=url,
                              quiet=options.quiet,
-                             save_dir=download_dir)
+                             save_dir=download_dir,
+                             mp3_format=options.mp3_format)
             elif match_sh:
                 episodes = nts.get_episodes_of_show(match_sh.group(1))
                 for ep in episodes:
