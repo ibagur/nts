@@ -65,7 +65,9 @@ def download(url, quiet, save_dir, save=True, mp3_format=False):
     parsed = parse_nts_data(bs, api_data)
     parsed['url'] = nts_url
 
-    link = api_data.get('mixcloud', '') or api_data.get('audio_sources', [{'url': ''}])[0].get('url', '')
+    audio_sources = api_data.get('audio_sources', [])
+    audio_sources_url = audio_sources[0].get('url', '') if audio_sources else ''
+    link = api_data.get('mixcloud', '') or audio_sources_url
 
     if 'https://mixcloud' not in link:
         mixcloud_url = mixcloud_try(parsed)
