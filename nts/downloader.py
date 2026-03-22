@@ -183,7 +183,13 @@ def parse_nts_data(bs, api_data):
 
 def parse_tracklist(api_data):
     # tracklist
-    tracks = api_data.get('embeds', {}).get('tracklist', {}).get('results', [])
+    embeds = api_data.get('embeds', {})
+    if isinstance(embeds, list):
+        embeds = {}
+    tracklist = embeds.get('tracklist', {})
+    if isinstance(tracklist, list):
+        tracklist = {}
+    tracks = tracklist.get('results', [])
     tracks = map(lambda x: {'name': x.get('title', ''), 'artist': x.get('artist', '')}, tracks)
     return list(tracks)
 
