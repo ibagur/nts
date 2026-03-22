@@ -73,6 +73,8 @@ nts --mp3 https://www.nts.live/shows/myshow
 nts --mp3 -o ~/Desktop/NTS -q https://www.nts.live/shows/myshow
 ```
 
+A real-time progress bar is shown during conversion. Use `-q` to suppress it.
+
 **Note:** MP3 conversion requires [FFmpeg](https://ffmpeg.org/) to be installed on your system.
 
 - **macOS**: `brew install ffmpeg`

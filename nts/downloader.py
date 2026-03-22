@@ -12,6 +12,7 @@ from cssutils import parseStyle
 from bs4 import BeautifulSoup
 import ffmpeg
 import music_tag
+from tqdm import tqdm
 
 __version__ = '1.3.8'
 
@@ -321,18 +322,48 @@ def convert_audio_format(old_file_path, file_name, save_dir, target_format='ogg'
         return old_file_path, old_ext
 
     try:
-        if not quiet:
-            print(f'Converting to {target_format.upper()}...')
+        stream = ffmpeg.input(old_file_path).output(new_file_path, **ffmpeg_kwargs)
 
-        ffmpeg.input(old_file_path).output(
-            new_file_path,
-            **ffmpeg_kwargs
-        ).run(
-            overwrite_output=True,
-            capture_stdout=True,
-            capture_stderr=True,
-            quiet=quiet
-        )
+        if target_format == 'mp3' and not quiet:
+            # Get duration for progress bar; fall back to indeterminate if unavailable
+            duration = None
+            try:
+                probe = ffmpeg.probe(old_file_path)
+                duration = float(probe['format']['duration'])
+            except Exception:
+                pass
+
+            process = stream.run_async(pipe_stdout=True, pipe_stderr=True, overwrite_output=True)
+            time_pattern = re.compile(r'time=(\d+):(\d+):(\d+\.\d+)')
+            bar_fmt = '{l_bar}{bar}| {n:.0f}/{total:.0f}s' if duration else '{l_bar}{bar}'
+            stderr_lines = []
+            with tqdm(total=duration, unit='s', unit_scale=True, desc='Converting to MP3',
+                      bar_format=bar_fmt) as bar:
+                last = 0
+                buf = b''
+                while True:
+                    # read1() returns whatever is available without blocking for a full buffer
+                    chunk = process.stderr.read1(4096)
+                    if not chunk:
+                        break
+                    buf += chunk
+                    # ffmpeg uses \r for progress lines, \n for info lines
+                    parts = re.split(b'[\r\n]', buf)
+                    buf = parts[-1]  # keep any incomplete line
+                    for part in parts[:-1]:
+                        line_str = part.decode('utf-8', errors='replace')
+                        stderr_lines.append(line_str)
+                        m = time_pattern.search(line_str)
+                        if m:
+                            h, mn, s = int(m.group(1)), int(m.group(2)), float(m.group(3))
+                            current = h * 3600 + mn * 60 + s
+                            bar.update(current - last)
+                            last = current
+            process.wait()
+            if process.returncode != 0:
+                raise ffmpeg.Error('ffmpeg', b'', b''.join(l.encode() for l in stderr_lines))
+        else:
+            stream.run(overwrite_output=True, capture_stdout=True, capture_stderr=True, quiet=quiet)
 
         # Verify output file exists and has content
         if os.path.exists(new_file_path) and os.path.getsize(new_file_path) > 0:
