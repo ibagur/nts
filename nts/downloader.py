@@ -55,6 +55,32 @@ def mixcloud_try(parsed):
             return resp['url']
     return None
 
+def get_audio_link(api_data, parsed):
+    audio_sources = api_data.get('audio_sources', [])
+    for audio_source in audio_sources:
+        audio_source_url = audio_source.get('url', '')
+        if audio_source_url:
+            return audio_source_url
+
+    link = api_data.get('mixcloud', '')
+    if link:
+        return link
+
+    return mixcloud_try(parsed)
+
+def get_ytdlp_options(save_dir, file_name, quiet=False):
+    return {
+        'outtmpl': os.path.join(save_dir, f'{file_name}.%(ext)s'),
+        'quiet': quiet,
+        'format': 'http_mp3_128/http_mp3/hls_mp3_128/hls_mp3/bestaudio/best',
+    }
+
+def get_downloaded_files(files, file_name):
+    return [
+        file for file in files
+        if file.startswith(file_name) and not file.endswith('.part')
+    ]
+
 def download(url, quiet, save_dir, save=True, mp3_format=False):
     nts_url = url
     page = requests.get(url).content
@@ -66,19 +92,7 @@ def download(url, quiet, save_dir, save=True, mp3_format=False):
     parsed = parse_nts_data(bs, api_data)
     parsed['url'] = nts_url
 
-    audio_sources = api_data.get('audio_sources', [])
-    audio_sources_url = audio_sources[0].get('url', '') if audio_sources else ''
-    link = api_data.get('mixcloud', '') or audio_sources_url
-
-    if 'https://mixcloud' not in link:
-        mixcloud_url = mixcloud_try(parsed)
-        if mixcloud_url:
-            link = mixcloud_url
-
-    if 'https://mixcloud' in link:
-        host = 'mixcloud'
-    elif 'https://soundcloud' in link:
-        host = 'soundcloud'
+    link = get_audio_link(api_data, parsed)
 
     # get album art. If the one on mixcloud is available, use it. Otherwise,
     # fall back to the nts website.
@@ -96,52 +110,48 @@ def download(url, quiet, save_dir, save=True, mp3_format=False):
     if save:
         if not quiet:
             print(f'\ndownloading into: {save_dir}\n')
-        ydl_opts = {
-            'outtmpl': os.path.join(save_dir, f'{file_name}.%(ext)s'),
-            'quiet': quiet
-        }
+        ydl_opts = get_ytdlp_options(save_dir, file_name, quiet)
         with YoutubeDL(ydl_opts) as ydl:
             ydl.download([link])
 
         # get the downloaded file
-        files = os.listdir(save_dir)
+        files = get_downloaded_files(os.listdir(save_dir), file_name)
         for file in files:
-            if file.startswith(file_name):
-                # found
-                if not quiet:
-                    print(f'adding metadata to {file} ...')
+            # found
+            if not quiet:
+                print(f'adding metadata to {file} ...')
 
-                # .m4a and .mp3 use different methods
-                _, file_ext = os.path.splitext(file)
-                file_ext = file_ext.lower()
+            # .m4a and .mp3 use different methods
+            _, file_ext = os.path.splitext(file)
+            file_ext = file_ext.lower()
 
-                # Determine if conversion is needed
-                needs_conversion = False
-                target_format = None
+            # Determine if conversion is needed
+            needs_conversion = False
+            target_format = None
 
-                if mp3_format:
-                    # Convert everything to MP3 if flag is set (except if already MP3)
-                    if file_ext != '.mp3':
-                        needs_conversion = True
-                        target_format = 'mp3'
-                else:
-                    # Default behavior: convert only webm/opus to ogg
-                    if file_ext == '.webm' or file_ext == '.opus':
-                        needs_conversion = True
-                        target_format = 'ogg'
+            if mp3_format:
+                # Convert everything to MP3 if flag is set (except if already MP3)
+                if file_ext != '.mp3':
+                    needs_conversion = True
+                    target_format = 'mp3'
+            else:
+                # Default behavior: convert only webm/opus to ogg
+                if file_ext == '.webm' or file_ext == '.opus':
+                    needs_conversion = True
+                    target_format = 'ogg'
 
-                if needs_conversion:
-                    old_file_path = os.path.join(save_dir, file)
-                    new_file_path, file_ext = convert_audio_format(
-                        old_file_path,
-                        file_name,
-                        save_dir,
-                        target_format,
-                        quiet
-                    )
-                    file = os.path.basename(new_file_path)
+            if needs_conversion:
+                old_file_path = os.path.join(save_dir, file)
+                new_file_path, file_ext = convert_audio_format(
+                    old_file_path,
+                    file_name,
+                    save_dir,
+                    target_format,
+                    quiet
+                )
+                file = os.path.basename(new_file_path)
 
-                set_metadata(os.path.join(save_dir, file), parsed, image, image_type)
+            set_metadata(os.path.join(save_dir, file), parsed, image, image_type)
 
     return parsed
 

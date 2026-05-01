@@ -89,6 +89,23 @@ User Input (URL/File + Options)
                 → Metadata Embedding
 ```
 
+### Audio Source Selection
+
+Prefer NTS-provided `audio_sources` URLs before falling back to the episode `mixcloud` URL. Some current NTS episodes include stale Mixcloud links alongside valid SoundCloud sources, so Mixcloud should not take precedence when an `audio_sources` URL is available.
+
+Source priority:
+1. First valid URL in `api_data["audio_sources"]`
+2. `api_data["mixcloud"]`
+3. Mixcloud search fallback via `mixcloud_try(...)`
+
+For SoundCloud downloads, `yt-dlp` should prefer progressive MP3 formats before HLS formats:
+
+```
+http_mp3_128/http_mp3/hls_mp3_128/hls_mp3/bestaudio/best
+```
+
+This avoids SoundCloud HLS AAC downloads being handled by FFmpeg with very verbose segment-by-segment output.
+
 ### Audio Format Conversion
 
 The tool supports flexible audio format conversion:
