@@ -72,6 +72,7 @@ def get_ytdlp_options(save_dir, file_name, quiet=False):
     return {
         'outtmpl': os.path.join(save_dir, f'{file_name}.%(ext)s'),
         'quiet': quiet,
+        'noprogress': quiet,
         'format': 'http_mp3_128/http_mp3/hls_mp3_128/hls_mp3/bestaudio/best',
         # native HLS shows real progress; the FFmpeg downloader only prints per-segment lines
         'hls_prefer_native': True,

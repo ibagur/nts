@@ -28,10 +28,10 @@ python -m nts https://www.nts.live/shows/myshow
 # With options
 nts -o ~/Desktop/NTS links.txt
 nts -q https://www.nts.live/shows/myshow  # quiet mode
-nts --mp3 https://www.nts.live/shows/myshow/episodes/myepisode  # convert to MP3 (320kbps)
+nts --original https://www.nts.live/shows/myshow/episodes/myepisode  # keep downloaded format (alias --aac); MP3 is the default
 
 # Combined options
-nts --mp3 -o ~/Desktop/NTS -q https://www.nts.live/shows/myshow
+nts --original -o ~/Desktop/NTS -q https://www.nts.live/shows/myshow
 ```
 
 ### Building for Distribution
@@ -83,8 +83,8 @@ User Input (URL/File + Options)
           → Audio Source Discovery (Mixcloud/SoundCloud)
             → yt-dlp Download
               → Format Conversion Decision:
-                 • With --mp3: convert all to MP3 (320kbps) via convert_audio_format()
-                 • Without --mp3: convert .webm/.opus to OGG (stream copy)
+                 • Default: convert all to MP3 (320kbps) via convert_audio_format()
+                 • With --original/--aac: convert .webm/.opus to OGG (stream copy)
                  • Skip if already target format
                 → Metadata Embedding
 ```
@@ -110,13 +110,13 @@ This avoids SoundCloud HLS AAC downloads being handled by FFmpeg with very verbo
 
 The tool supports flexible audio format conversion:
 
-**Default Behavior (no --mp3 flag):**
-- `.webm`/`.opus` → `.ogg` (stream copy, no re-encoding)
-- Other formats → kept as-is
-
-**With --mp3 Flag:**
+**Default Behavior (also --mp3):**
 - All formats → `.mp3` at 320kbps CBR (libmp3lame encoder, 44.1kHz)
 - Already `.mp3` → no conversion (optimization)
+
+**With --original (alias --aac) Flag:**
+- `.webm`/`.opus` → `.ogg` (stream copy, no re-encoding)
+- Other formats → kept as-is
 
 **Error Handling:**
 - FFmpeg failures → keeps original file, prints warning

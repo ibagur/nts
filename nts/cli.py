@@ -41,10 +41,15 @@ def main():
                       action="store_true",
                       help="only print errors")
     parser.add_option("--mp3",
-                      default=False,
+                      default=True,
                       dest="mp3_format",
                       action="store_true",
-                      help="convert downloaded files to MP3 format (320kbps)")
+                      help="convert downloaded files to MP3 format (320kbps), the default")
+    parser.add_option("--original",
+                      "--aac",
+                      dest="mp3_format",
+                      action="store_false",
+                      help="keep the downloaded format (usually AAC) instead of converting to MP3")
 
     (options, args) = parser.parse_args()
 
