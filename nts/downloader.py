@@ -7,6 +7,8 @@ import json
 
 import mutagen
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from yt_dlp import YoutubeDL
 from cssutils import parseStyle
 from bs4 import BeautifulSoup
@@ -22,6 +24,16 @@ if sys.platform.startswith('win32'):
     download_dir = '%USERPROFILE\\Downloads\\'
 # expand it
 download_dir = os.path.expanduser('~/Downloads')
+
+# (connect, read) timeout so a stalled DNS lookup or connection fails instead of hanging forever
+HTTP_TIMEOUT = (10, 30)
+# one pooled session reuses connections across the page, API and artwork requests
+session = requests.Session()
+session.mount('https://', HTTPAdapter(max_retries=Retry(
+    total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])))
+
+def http_get(url):
+    return session.get(url, timeout=HTTP_TIMEOUT)
 
 def get_suffix(day):
     if 10 <= day % 100 <= 20:
@@ -45,7 +57,7 @@ def mixcloud_try(parsed):
     query = re.sub(r'[-/]', '', title)
     query = re.sub(r'\s+', '+', query)
     query = "https://api.mixcloud.com/search/?q=" + query + "&type=cloudcast"
-    reply = requests.get(query)
+    reply = http_get(query)
     if reply.status_code != 200:
         return None
     reply = reply.json()['data']
@@ -88,10 +100,13 @@ def get_downloaded_files(files, file_name):
 
 def download(url, quiet, save_dir, save=True, mp3_format=False):
     nts_url = url
-    page = requests.get(url).content
+    if not quiet:
+        print(f'\nfetching episode info: {url}')
+    page = http_get(url).content
     bs = BeautifulSoup(page, 'html.parser')
-    api_url = "https://nts.live/api/v2" + urllib.parse.urlparse(url).path
-    api_data = requests.get(api_url).json()
+    # www avoids a 301 redirect (and an extra DNS lookup) on every call
+    api_url = "https://www.nts.live/api/v2" + urllib.parse.urlparse(url).path
+    api_data = http_get(api_url).json()
 
     # guessing there is one
     parsed = parse_nts_data(bs, api_data)
@@ -105,9 +120,9 @@ def download(url, quiet, save_dir, save=True, mp3_format=False):
     image = None
 
     if len(parsed['image_url'])> 0:
-        image = urllib.request.urlopen(parsed["image_url"])
-        image_type = image.info().get_content_type()
-        image = image.read()
+        response = http_get(parsed["image_url"])
+        image_type = response.headers.get('Content-Type', '').split(';')[0]
+        image = response.content
 
     file_name = f'{parsed["safe_title"]} - {parsed["date"].year}-{parsed["date"].month}-{parsed["date"].day}'
 
@@ -249,7 +264,7 @@ def get_episodes_of_show(show_name):
     output = []
     while True:
         api_url = f'https://www.nts.live/api/v2/shows/{show_name}/episodes?offset={offset}'
-        res = requests.get(api_url)
+        res = http_get(api_url)
         try:
             res = res.json()
         except json.decoder.JSONDecodeError as e:
