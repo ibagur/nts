@@ -73,6 +73,8 @@ def get_ytdlp_options(save_dir, file_name, quiet=False):
         'outtmpl': os.path.join(save_dir, f'{file_name}.%(ext)s'),
         'quiet': quiet,
         'format': 'http_mp3_128/http_mp3/hls_mp3_128/hls_mp3/bestaudio/best',
+        # native HLS shows real progress; the FFmpeg downloader only prints per-segment lines
+        'hls_prefer_native': True,
     }
 
 def get_downloaded_files(files, file_name):
@@ -367,6 +369,9 @@ def convert_audio_format(old_file_path, file_name, save_dir, target_format='ogg'
                         if m:
                             h, mn, s = int(m.group(1)), int(m.group(2)), float(m.group(3))
                             current = h * 3600 + mn * 60 + s
+                            if duration:
+                                # ffmpeg's time can run slightly past the probed duration
+                                current = min(current, duration)
                             bar.update(current - last)
                             last = current
             process.wait()
@@ -413,6 +418,8 @@ def set_metadata(file_path, parsed, image, image_type):
     if tracklist:
         f['lyrics'] = "Tracklist:\n" + get_tracklist(parsed)
     f['comment'] = get_comment(parsed)
+    if image:
+        f['artwork'] = image
 
     f.save()
 
